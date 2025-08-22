@@ -1,0 +1,18 @@
+{
+  "name": "AnthropicApiKeyManager",
+  "description": "Manages and distributes limited Anthropic API keys with cost tracking and P2P distribution",
+  "image": "",
+  "properties": {
+    "package_name": "anthropic-api-key-manager",
+    "current_version": "0.1.0",
+    "publisher": "anthropic-manager.os",
+    "mirrors": [],
+    "code_hashes": {
+      "0.1.0": ""
+    },
+    "wit_version": 1,
+    "dependencies": []
+  },
+  "external_url": "",
+  "animation_url": ""
+}
