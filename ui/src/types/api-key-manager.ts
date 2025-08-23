@@ -1,6 +1,6 @@
 export interface ApiKey {
   key: string;
-  status: 'active' | 'inactive';
+  status: string;
   total_cost: number;
   assigned_nodes: string[];
   created_at: number;
@@ -14,14 +14,14 @@ export interface CostRecord {
 }
 
 export interface NodeAssignment {
-  node_id: string;
+  node_id: string;  // Keep as snake_case to match what backend sends
   api_key: string;
   issued_at: number;
 }
 
 export interface CostData {
   total_cost: number;
-  cost_by_key: Record<string, number>;
+  cost_by_key: [string, number][];  // Changed to match the TypeScript generated type
   currency: string;
 }
 
@@ -37,31 +37,4 @@ export interface ChartDataPoint {
   totalCost: number;
   currency: string;
   newNodes?: string[];
-}
-
-export interface AddKeyRequest {
-  api_key: string;
-}
-
-export interface RemoveKeyRequest {
-  api_key: string;
-}
-
-export interface KeyStatusRequest {
-  api_key: string;
-}
-
-export interface CostRangeRequest {
-  start_date?: string;
-  end_date?: string;
-}
-
-export interface KeyCostRequest {
-  api_key: string;
-  start_date?: string;
-  end_date?: string;
-}
-
-export interface SetAdminKeyRequest {
-  admin_key: string;
 }

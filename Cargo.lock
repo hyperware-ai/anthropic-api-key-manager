@@ -575,6 +575,7 @@ dependencies = [
  "base64",
  "caller-utils",
  "chrono",
+ "http",
  "hyperprocess_macro",
  "hyperware_app_common",
  "process_macros",

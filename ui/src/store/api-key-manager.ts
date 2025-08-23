@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { ApiKey, CostRecord, NodeAssignment, CostData, KeyCostData } from '../types/api-key-manager';
+import { CostData, KeyCostData } from '../types/api-key-manager';
+import { ApiKeyInfo as ApiKey, CostRecord, NodeAssignment } from '../../../target/ui/caller-utils';
 
 interface ApiKeyManagerStore {
   // State
