@@ -3,9 +3,9 @@ use hyperware_process_lib::{
     our,
     homepage::add_to_homepage,
     http::client::send_request_await_response,
+    hyperapp::{source, SaveOptions},
     timer::set_timer,
 };
-use hyperware_app_common::SaveOptions;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use rand::seq::SliceRandom;
@@ -15,7 +15,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use url::Url;
 
 #[derive(Default, Serialize, Deserialize)]
-pub struct ApiKeyManagerState {
+pub struct AnthropicApiKeyManagerState {
     admin_api_key: Option<String>,
     active_keys: HashSet<String>,
     historical_keys: HashSet<String>,
@@ -215,10 +215,10 @@ struct AnthropicApiKey {
     save_config = SaveOptions::OnDiff,
     wit_world = "anthropic-api-key-manager-v0"
 )]
-impl ApiKeyManagerState {
+impl AnthropicApiKeyManagerState {
     #[init]
     async fn initialize(&mut self) {
-        add_to_homepage("API Key Manager", Some("🔑"), Some("/"), None);
+        add_to_homepage("API Key Manager", None, Some("/"), None);
 
         if self.ui_auth_token.is_none() {
             let token = BASE64.encode(format!("{:x}", rand::random::<u128>()));
@@ -233,7 +233,9 @@ impl ApiKeyManagerState {
     }
 
     #[remote]
-    async fn request_api_key(&mut self, node_id: String) -> Result<String, String> {
+    async fn request_api_key(&mut self) -> Result<String, String> {
+        let node_id = source().node;
+
         if let Some(existing_key) = self.find_key_for_node(&node_id) {
             return Ok(existing_key);
         }
@@ -451,9 +453,19 @@ impl ApiKeyManagerState {
 
     #[http]
     async fn get_all_costs(&self) -> Result<Vec<CostRecord>, String> {
+        println!("get_all_costs called. Returning {} cost records", self.all_costs.len());
+
+        // Debug: print first few records if any exist
+        if !self.all_costs.is_empty() {
+            println!("Sample cost records:");
+            for (i, cost) in self.all_costs.iter().take(3).enumerate() {
+                println!("  [{}] {} {} - {}", i, cost.amount, cost.currency, cost.description);
+            }
+        }
+
         Ok(self.all_costs.clone())
     }
-    
+
     #[http]
     async fn refresh_costs(&mut self) -> Result<CostsRefreshResponse, String> {
         if self.admin_api_key.is_none() {
@@ -462,13 +474,28 @@ impl ApiKeyManagerState {
 
         let now = Utc::now().timestamp();
 
+        // Debug logging
+        println!("refresh_costs called. Current time: {}, Last check: {:?}", now, self.last_cost_check);
+
         if let Some(last_check) = self.last_cost_check {
-            if now - last_check < 3600 {
+            let time_since_last = now - last_check;
+            println!("Time since last check: {} seconds", time_since_last);
+
+            // Only rate limit if less than 60 seconds (not 3600)
+            // But allow negative time_since_last (which means timestamp is in future - a bug we're fixing)
+            if time_since_last < 60 && time_since_last > 0 {
+                println!("Rate limiting: costs were refreshed {} seconds ago", time_since_last);
                 return Ok(CostsRefreshResponse {
                     success: false,
-                    message: format!("Costs were recently refreshed at {}", last_check),
+                    message: format!("Costs were recently refreshed {} seconds ago", time_since_last),
                     timestamp: last_check,
                 });
+            }
+
+            // If time_since_last is negative, clear the bad timestamp
+            if time_since_last < 0 {
+                println!("WARNING: last_cost_check is in the future! Clearing it.");
+                self.last_cost_check = None;
             }
         }
 
@@ -491,7 +518,7 @@ impl ApiKeyManagerState {
 
 }
 
-impl ApiKeyManagerState {
+impl AnthropicApiKeyManagerState {
     fn find_key_for_node(&self, node_id: &str) -> Option<String> {
         for (key, nodes) in &self.key_to_nodes {
             if nodes.contains(&node_id.to_string()) {
@@ -525,14 +552,17 @@ impl ApiKeyManagerState {
         let admin_key = self.admin_api_key.as_ref()
             .ok_or("Admin API key not configured")?;
 
-        // Use fixed starting date
+        // Use fixed starting date (30 days ago to get recent data)
         let now = Utc::now();
-        let starting_at = "2025-08-01T00:00:00Z";
+        let starting_at = "2024-11-01T00:00:00Z";  // Changed to past date to get actual usage data
 
+        // The Anthropic Admin API cost_report endpoint
         let url_str = format!(
-            "https://api.anthropic.com/v1/organizations/cost_report?starting_at={}&group_by[]=workspace_id&group_by[]=description&limit=31",
+            "https://api.anthropic.com/v1/organizations/cost_report?starting_at={}&group_by[]=workspace_id&group_by[]=description&limit=100",
             starting_at
         );
+
+        println!("Fetching costs from URL: {}", url_str);
 
         let url = Url::parse(&url_str).map_err(|e| format!("Invalid URL: {}", e))?;
 
@@ -555,16 +585,21 @@ impl ApiKeyManagerState {
                 Some(headers.clone()),
                 30000, // 30 second timeout
                 vec![]
-            ) {
+            ).await {
                 Ok(response) => {
                     if response.status() == http::StatusCode::OK {
-                        match serde_json::from_slice::<AnthropicCostReport>(response.body()) {
+                        let response_body = String::from_utf8_lossy(response.body());
+                        println!("Anthropic API response: {}", response_body);
+
+                        match serde_json::from_str::<AnthropicCostReport>(&response_body) {
                             Ok(cost_report) => {
+                                println!("Successfully parsed cost report with {} data entries", cost_report.data.len());
                                 // Successfully got the cost report, process it
                                 return self.process_cost_report(cost_report, now.timestamp());
                             }
                             Err(e) => {
-                                last_error = format!("Failed to parse response: {}", e);
+                                last_error = format!("Failed to parse response: {}. Body: {}", e, response_body);
+                                println!("Parse error: {}", last_error);
                             }
                         }
                     } else if response.status() == http::StatusCode::TOO_MANY_REQUESTS {
@@ -606,11 +641,17 @@ impl ApiKeyManagerState {
     fn process_cost_report(&mut self, cost_report: AnthropicCostReport, timestamp: i64) -> Result<usize, String> {
         let mut costs_added = 0;
 
+        println!("Processing cost report with {} data entries", cost_report.data.len());
+
         for data in cost_report.data {
+            println!("Processing data entry from {} to {} with {} results",
+                     data.starting_at, data.ending_at, data.results.len());
+
             for result in data.results {
                 // Try to parse the amount
                 let amount = result.amount.parse::<f64>().unwrap_or(0.0);
-                
+                println!("Cost result: {} {} - {}", amount, result.currency, result.description);
+
                 // Skip zero amounts
                 if amount == 0.0 {
                     continue;
@@ -624,10 +665,11 @@ impl ApiKeyManagerState {
                     currency: result.currency,
                     description: result.description,
                 };
-                
+
                 // Add to global costs
                 self.all_costs.push(record.clone());
                 costs_added += 1;
+                println!("Added cost record: {} {} at timestamp {}", amount, record.currency, timestamp);
 
                 // Also add to per-key costs if we have active keys
                 for key in self.active_keys.iter() {
@@ -639,6 +681,7 @@ impl ApiKeyManagerState {
             }
         }
 
+        println!("Total costs added: {}. Total costs in system: {}", costs_added, self.all_costs.len());
         Ok(costs_added)
     }
 
@@ -664,7 +707,7 @@ impl ApiKeyManagerState {
             Some(headers),
             30000,
             body.to_string().into_bytes()
-        ).map_err(|e| format!("HTTP request failed: {:?}", e))?;
+        ).await.map_err(|e| format!("HTTP request failed: {:?}", e))?;
 
         if response.status() != http::StatusCode::OK && response.status() != http::StatusCode::CREATED {
             return Err(format!("API returned status {}: {}",
@@ -698,7 +741,7 @@ impl ApiKeyManagerState {
             Some(headers),
             30000,
             vec![]
-        ).map_err(|e| format!("HTTP request failed: {:?}", e))?;
+        ).await.map_err(|e| format!("HTTP request failed: {:?}", e))?;
 
         if response.status() != http::StatusCode::OK {
             return Err(format!("API returned status {}: {}",
@@ -713,7 +756,7 @@ impl ApiKeyManagerState {
 }
 
 // Timer handler for periodic cost polling
-async fn handle_timer(state: &mut ApiKeyManagerState) -> Result<(), String> {
+async fn handle_timer(state: &mut AnthropicApiKeyManagerState) -> Result<(), String> {
     if state.admin_api_key.is_some() {
         // Refresh costs periodically
         match state.fetch_costs_from_anthropic().await {

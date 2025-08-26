@@ -5,7 +5,7 @@
   "properties": {
     "package_name": "anthropic-api-key-manager",
     "current_version": "0.1.0",
-    "publisher": "anthropic-manager.os",
+    "publisher": "ware.hypr",
     "mirrors": [],
     "code_hashes": {
       "0.1.0": ""
