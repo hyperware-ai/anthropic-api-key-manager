@@ -30,14 +30,29 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload[0]) {
     const data = payload[0].payload;
     return (
-      <div style={{ backgroundColor: 'white', padding: '10px', border: '1px solid #ccc', borderRadius: '4px' }}>
-        <p style={{ margin: '0 0 5px 0' }}>{`Date: ${new Date(data.timestamp * 1000).toLocaleString()}`}</p>
-        <p style={{ margin: '0 0 5px 0', color: '#8884d8' }}>{`Cost: $${data.totalCost.toFixed(2)}`}</p>
+      <div style={{ 
+        backgroundColor: 'var(--bg-secondary)', 
+        padding: '10px', 
+        border: '1px solid var(--border-color)', 
+        borderRadius: '4px',
+        boxShadow: '0 2px 8px var(--shadow)'
+      }}>
+        <p style={{ margin: '0 0 5px 0', color: 'var(--text-primary)' }}>
+          {`Date: ${new Date(data.timestamp * 1000).toLocaleString()}`}
+        </p>
+        <p style={{ margin: '0 0 5px 0', color: '#8884d8' }}>
+          {`Cost: $${data.totalCost.toFixed(2)}`}
+        </p>
         {data.newNodes && data.newNodes.length > 0 && (
           <div>
-            <p style={{ margin: '5px 0', fontWeight: 'bold' }}>New nodes:</p>
+            <p style={{ margin: '5px 0', fontWeight: 'bold', color: 'var(--text-primary)' }}>New nodes:</p>
             {data.newNodes.map((node: string) => (
-              <p key={node} style={{ fontSize: '12px', marginLeft: '10px', margin: '2px 0' }}>• {node}</p>
+              <p key={node} style={{ 
+                fontSize: '12px', 
+                marginLeft: '10px', 
+                margin: '2px 0',
+                color: 'var(--text-secondary)'
+              }}>• {node}</p>
             ))}
           </div>
         )}
@@ -47,10 +62,84 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
+// Modal Component for showing connected nodes
+const ConnectedNodesModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+  const { apiKeys, nodeHistory } = useApiKeyManagerStore();
+  
+  if (!isOpen) return null;
+  
+  // Group nodes by API key
+  const nodesByKey = new Map<string, { nodes: string[], keyInfo: ApiKey | undefined }>();
+  
+  nodeHistory.forEach(assignment => {
+    if (!nodesByKey.has(assignment.api_key)) {
+      const keyInfo = apiKeys.find(k => k.key === assignment.api_key);
+      nodesByKey.set(assignment.api_key, { nodes: [], keyInfo });
+    }
+    const entry = nodesByKey.get(assignment.api_key);
+    if (entry && !entry.nodes.includes(assignment.node_id)) {
+      entry.nodes.push(assignment.node_id);
+    }
+  });
+  
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Connected Nodes by API Key</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        
+        {nodesByKey.size === 0 ? (
+          <p style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No nodes connected yet</p>
+        ) : (
+          Array.from(nodesByKey.entries()).map(([key, data]) => (
+            <div key={key} style={{ marginBottom: '1.5rem' }}>
+              <div style={{ 
+                padding: '0.75rem', 
+                background: 'var(--code-bg)', 
+                borderRadius: '4px',
+                marginBottom: '0.5rem'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <code style={{ fontSize: '0.875rem', color: 'var(--text-primary)' }}>
+                    {key.substring(0, 20)}...
+                  </code>
+                  <span className={`status ${data.keyInfo?.status || 'unknown'}`}>
+                    {data.keyInfo?.status || 'unknown'}
+                  </span>
+                </div>
+              </div>
+              <ul className="node-list">
+                {data.nodes.map(nodeId => {
+                  const assignment = nodeHistory.find(n => n.node_id === nodeId && n.api_key === key);
+                  return (
+                    <li key={nodeId} className="node-item">
+                      <div className="node-info">
+                        <div className="node-name">{nodeId}</div>
+                        {assignment && (
+                          <div className="node-date">
+                            Connected: {new Date(assignment.issued_at * 1000).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
 // Dashboard Component
 const Dashboard: React.FC = () => {
   const { apiKeys, nodeHistory, totalCosts, costData, loading, error } = useApiKeyManagerStore();
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
+  const [showNodesModal, setShowNodesModal] = useState(false);
   
   useEffect(() => {
     // Use real cost data if available
@@ -75,6 +164,8 @@ const Dashboard: React.FC = () => {
   
   return (
     <div className="dashboard">
+      <ConnectedNodesModal isOpen={showNodesModal} onClose={() => setShowNodesModal(false)} />
+      
       <div className="stats-grid">
         <div className="stat-card">
           <h3>Total Keys</h3>
@@ -84,7 +175,11 @@ const Dashboard: React.FC = () => {
           <h3>Total Cost</h3>
           <p className="stat-value">${totalCosts?.total_cost?.toFixed(2) || '0.00'}</p>
         </div>
-        <div className="stat-card">
+        <div 
+          className="stat-card clickable" 
+          onClick={() => setShowNodesModal(true)}
+          style={{ cursor: 'pointer' }}
+        >
           <h3>Connected Nodes</h3>
           <p className="stat-value">{nodeHistory.length}</p>
         </div>
@@ -95,15 +190,17 @@ const Dashboard: React.FC = () => {
           <h3>Cost Over Time</h3>
           <ResponsiveContainer width="100%" height={400}>
             <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
               <XAxis 
                 dataKey="timestamp"
                 type="number"
                 domain={['dataMin', 'dataMax']}
                 tickFormatter={(timestamp) => new Date(timestamp * 1000).toLocaleDateString()}
+                stroke="var(--chart-text)"
               />
               <YAxis 
-                label={{ value: 'Total Cost ($)', angle: -90, position: 'insideLeft' }}
+                label={{ value: 'Total Cost ($)', angle: -90, position: 'insideLeft', fill: 'var(--chart-text)' }}
+                stroke="var(--chart-text)"
               />
               <Tooltip content={<CustomTooltip />} />
               <Line 
@@ -117,7 +214,7 @@ const Dashboard: React.FC = () => {
               {nodeHistory.map((node, index) => (
                 <ReferenceLine 
                   key={index}
-                  x={node.issuedAt} 
+                  x={node.issued_at} 
                   stroke="green" 
                   strokeDasharray="5 5"
                   opacity={0.5}
@@ -128,7 +225,7 @@ const Dashboard: React.FC = () => {
         </div>
       ) : (
         <div className="chart-container">
-          <p style={{ textAlign: 'center', color: '#666', padding: '2rem' }}>
+          <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem' }}>
             No cost data available yet. Add API keys and refresh costs to see the chart.
           </p>
         </div>
@@ -145,7 +242,7 @@ const KeyList: React.FC = () => {
   const handleAddKey = async () => {
     if (!newKey.trim()) return;
     try {
-      const response = await api.addApiKey({ apiKey: newKey });
+      const response = await api.add_api_key({ api_key: newKey });
       if (!response.success) {
         throw new Error(response.message || 'Failed to add key');
       }
@@ -158,7 +255,7 @@ const KeyList: React.FC = () => {
   
   const handleRemoveKey = async (key: string) => {
     try {
-      const response = await api.removeApiKey({ apiKey: key });
+      const response = await api.remove_api_key({ api_key: key });
       if (!response.success) {
         throw new Error(response.message || 'Failed to remove key');
       }
@@ -170,7 +267,7 @@ const KeyList: React.FC = () => {
   
   const refreshKeys = async () => {
     try {
-      const response = await api.listKeys();
+      const response = await api.list_keys();
       const keys: ApiKey[] = response;
       useApiKeyManagerStore.getState().setApiKeys(keys);
     } catch (error) {
@@ -210,8 +307,8 @@ const KeyList: React.FC = () => {
               <td>
                 <span className={`status ${key.status}`}>{key.status}</span>
               </td>
-              <td>${key.totalCost.toFixed(2)}</td>
-              <td>{key.assignedNodes.length}</td>
+              <td>${key.total_cost.toFixed(2)}</td>
+              <td>{key.assigned_nodes.length}</td>
               <td>
                 <button 
                   onClick={() => setSelectedKey(key.key)}
@@ -243,7 +340,7 @@ const AdminPanel: React.FC = () => {
   const handleSetAdminKey = async () => {
     if (!adminKey.trim()) return;
     try {
-      const response = await api.setAdminKey({ adminKey });
+      const response = await api.set_admin_key({ admin_key: adminKey });
       if (!response.success) {
         throw new Error(response.message || 'Failed to set admin key');
       }
@@ -258,7 +355,7 @@ const AdminPanel: React.FC = () => {
   
   const handleRefreshCosts = async () => {
     try {
-      const response = await api.refreshCosts();
+      const response = await api.refresh_costs();
       if (!response.success) {
         throw new Error(response.message || 'Failed to refresh costs');
       }
@@ -274,11 +371,11 @@ const AdminPanel: React.FC = () => {
   
   const loadCosts = async () => {
     try {
-      const response = await api.getTotalCosts({ startDate: null, endDate: null });
+      const response = await api.get_total_costs({ start_date: null, end_date: null });
       // Convert TotalCostsResponse to CostData format
       const costs = {
-        total_cost: response.totalCost,
-        cost_by_key: response.costByKey,
+        total_cost: response.total_cost,
+        cost_by_key: response.cost_by_key,
         currency: response.currency
       };
       useApiKeyManagerStore.getState().setTotalCosts(costs);
@@ -289,7 +386,7 @@ const AdminPanel: React.FC = () => {
   
   const loadCostData = async () => {
     try {
-      const response = await api.getAllCosts();
+      const response = await api.get_all_costs();
       const costData: CostRecord[] = response;
       useApiKeyManagerStore.getState().setCostData(costData);
     } catch (error) {
@@ -356,8 +453,8 @@ function prepareChartData(costs: CostRecord[], nodeHistory: NodeAssignment[]): C
     
     // Find nodes that joined around this time (within 1 hour window)
     const newNodes = nodeHistory
-      .filter(n => Math.abs(n.issuedAt - timestamp) < 3600)
-      .map(n => n.nodeId);
+      .filter(n => Math.abs(n.issued_at - timestamp) < 3600)
+      .map(n => n.node_id);
     
     dataPoints.push({
       timestamp,
@@ -382,20 +479,20 @@ function App() {
       setLoading(true);
       try {
         // Initialize auth and check admin key status
-        const authResponse = await api.initializeAuth();
+        const authResponse = await api.initialize_auth();
         const authData = authResponse;
         
         useApiKeyManagerStore.getState().setAuthToken(authData.token);
         
         // Set admin key status if provided
-        if (authData.hasAdminKey !== undefined) {
-          useApiKeyManagerStore.getState().setAdminKeySet(authData.hasAdminKey);
+        if (authData.has_admin_key !== undefined) {
+          useApiKeyManagerStore.getState().setAdminKeySet(authData.has_admin_key);
         }
         
         // Load initial data
         const [keysResponse, historyResponse] = await Promise.all([
-          api.listKeys(),
-          api.getNodeHistory()
+          api.list_keys(),
+          api.get_node_history()
         ]);
         
         const keys: ApiKey[] = keysResponse;
@@ -405,16 +502,16 @@ function App() {
         setNodeHistory(history);
         
         // Try to load costs if admin key is set
-        if (authData.hasAdminKey) {
+        if (authData.has_admin_key) {
           try {
             const [costsResponse, costDataResponse] = await Promise.all([
-              api.getTotalCosts({ startDate: null, endDate: null }),
-              api.getAllCosts()
+              api.get_total_costs({ start_date: null, end_date: null }),
+              api.get_all_costs()
             ]);
             // Convert TotalCostsResponse to CostData format
             const costs = {
-              total_cost: costsResponse.totalCost,
-              cost_by_key: costsResponse.costByKey,
+              total_cost: costsResponse.total_cost,
+              cost_by_key: costsResponse.cost_by_key,
               currency: costsResponse.currency
             };
             const costData = costDataResponse;

@@ -1,13 +1,13 @@
 [dependencies]
 anyhow = "1.0"
 base64 = "0.22"
-hyperware_process_lib = { git = "https://github.com/hyperware-ai/process_lib", rev = "753dac3", features = ["hyperapp"] }
+http = "1.1"
+hyperware_process_lib = { git = "https://github.com/hyperware-ai/process_lib", features = ["hyperapp"], rev = "b9f1ead" }
 process_macros = "0.1"
 rand = "0.8"
 serde_json = "1.0"
 url = "2.5"
 wit-bindgen = "0.42.1"
-http = "1.1"
 
 [dependencies.caller-utils]
 optional = true
@@ -19,7 +19,7 @@ version = "0.4"
 
 [dependencies.hyperprocess_macro]
 git = "https://github.com/hyperware-ai/hyperprocess-macro"
-rev = "ed99c19"
+rev = "ac43744"
 
 [dependencies.serde]
 features = ["derive"]

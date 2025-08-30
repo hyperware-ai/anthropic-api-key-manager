@@ -596,7 +596,7 @@ dependencies = [
  "chrono",
  "http",
  "hyperprocess_macro",
- "hyperware_process_lib 2.2.0",
+ "hyperware_process_lib",
  "process_macros",
  "rand 0.8.5",
  "serde",
@@ -957,7 +957,7 @@ dependencies = [
  "anyhow",
  "futures",
  "futures-util",
- "hyperware_process_lib 2.2.0",
+ "hyperware_process_lib",
  "once_cell",
  "process_macros",
  "serde",
@@ -1722,9 +1722,9 @@ dependencies = [
 [[package]]
 name = "hyperprocess_macro"
 version = "0.1.0"
-source = "git+https://github.com/hyperware-ai/hyperprocess-macro?rev=ed99c19#ed99c19c1e4f511786b2c827fb909ba3d3950238"
+source = "git+https://github.com/hyperware-ai/hyperprocess-macro?rev=ac43744#ac437440d2eb2de6e5196a79eb02e3e6c78b5f62"
 dependencies = [
- "hyperware_process_lib 2.0.1",
+ "hyperware_process_lib",
  "proc-macro2",
  "quote",
  "syn 2.0.106",
@@ -1732,38 +1732,8 @@ dependencies = [
 
 [[package]]
 name = "hyperware_process_lib"
-version = "2.0.1"
-source = "git+https://github.com/hyperware-ai/process_lib?rev=c27a881#c27a881e764920636ac025112533a714d622793c"
-dependencies = [
- "alloy",
- "alloy-primitives",
- "alloy-sol-macro",
- "alloy-sol-types",
- "anyhow",
- "base64",
- "bincode",
- "color-eyre",
- "futures-util",
- "http",
- "mime_guess",
- "rand 0.8.5",
- "regex",
- "rmp-serde",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tracing",
- "tracing-error",
- "tracing-subscriber",
- "url",
- "uuid",
- "wit-bindgen 0.42.1",
-]
-
-[[package]]
-name = "hyperware_process_lib"
 version = "2.2.0"
-source = "git+https://github.com/hyperware-ai/process_lib?rev=753dac3#753dac3d58cbf924264b47d7c0b845e2fcc03e32"
+source = "git+https://github.com/hyperware-ai/process_lib?rev=b9f1ead#b9f1ead63356bfd4b60b337a380fef1be81d81c6"
 dependencies = [
  "alloy",
  "alloy-primitives",
