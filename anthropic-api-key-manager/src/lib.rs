@@ -25,13 +25,14 @@ pub struct AnthropicApiKeyManagerState {
     key_costs: HashMap<String, Vec<CostRecord>>,
     all_costs: Vec<CostRecord>,  // Store all costs globally
     last_cost_check: Option<i64>,
+    last_cost_query_date: Option<String>,  // Store the last date we queried up to (RFC3339 format)
     ui_auth_token: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct CostRecord {
     timestamp: i64,
-    amount: f64,
+    amount: f64,        // Amount in dollars (converted from API's cents)
     currency: String,
     description: String,
 }
@@ -149,11 +150,11 @@ struct CostReportData {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct CostReportResult {
-    currency: String,
-    amount: String,
+    currency: String,              // Always "USD" 
+    amount: String,                // Amount in cents as decimal string (e.g., "123.45" = $1.2345)
     workspace_id: Option<String>,
-    description: String,
-    cost_type: String,
+    description: Option<String>,   // Made optional since it can be null when not grouping by description
+    cost_type: Option<String>,     // Made optional
     context_window: Option<String>,
     model: Option<String>,
     service_tier: Option<String>,
@@ -509,6 +510,26 @@ impl AnthropicApiKeyManagerState {
         }
     }
 
+    #[http]
+    async fn reset_costs(&mut self) -> Result<SuccessResponse, String> {
+        if self.admin_api_key.is_none() {
+            return Err("Admin API key not configured".to_string());
+        }
+
+        // Clear all cost data
+        self.all_costs.clear();
+        self.key_costs.clear();
+        self.last_cost_query_date = None;
+        self.last_cost_check = None;
+
+        println!("Cost data reset. All historical cost data cleared.");
+
+        Ok(SuccessResponse {
+            success: true,
+            message: "Cost data reset successfully. All historical data cleared.".to_string(),
+        })
+    }
+
 }
 
 impl AnthropicApiKeyManagerState {
@@ -545,93 +566,221 @@ impl AnthropicApiKeyManagerState {
         let admin_key = self.admin_api_key.as_ref()
             .ok_or("Admin API key not configured")?;
 
-        // Use fixed starting date (30 days ago to get recent data)
         let now = Utc::now();
-        let starting_at = "2024-11-01T00:00:00Z";  // Changed to past date to get actual usage data
+        
+        // Use the last query date if available, otherwise start from 30 days ago
+        let starting_at = if let Some(ref last_date) = self.last_cost_query_date {
+            // Start from the last date we queried (should already be in correct format)
+            last_date.clone()
+        } else {
+            // Default to 30 days ago for initial fetch
+            let thirty_days_ago = now - chrono::Duration::days(30);
+            // Format as UTC with Z suffix (e.g., "2025-08-01T00:00:00Z")
+            format!("{}Z", thirty_days_ago.format("%Y-%m-%dT%H:%M:%S"))
+        };
+        
+        println!("Fetching costs starting from: {}", starting_at);
+        
+        // Collect all cost reports across pages
+        let mut all_cost_reports = Vec::new();
+        let mut next_page: Option<String> = None;
+        let mut page_count = 0;
+        let max_pages = 100; // Safety limit to prevent infinite loops
 
-        // The Anthropic Admin API cost_report endpoint
-        let url_str = format!(
-            "https://api.anthropic.com/v1/organizations/cost_report?starting_at={}&group_by[]=workspace_id&group_by[]=description&limit=30",
-            starting_at
-        );
-
-        println!("Fetching costs from URL: {}", url_str);
-
-        let url = Url::parse(&url_str).map_err(|e| format!("Invalid URL: {}", e))?;
-
+        // Headers remain the same for all requests
         let mut headers = HashMap::new();
         headers.insert("anthropic-version".to_string(), "2023-06-01".to_string());
         headers.insert("content-type".to_string(), "application/json".to_string());
         headers.insert("x-api-key".to_string(), admin_key.clone());
 
-        // Retry logic: try up to 3 times with exponential backoff
-        let mut attempts = 0;
-        let max_attempts = 3;
-        let mut last_error = String::new();
+        // Fetch all pages
+        loop {
+            page_count += 1;
+            if page_count > max_pages {
+                println!("Warning: Reached maximum page limit of {}", max_pages);
+                break;
+            }
 
-        while attempts < max_attempts {
-            attempts += 1;
+            // Build URL with pagination
+            let url_str = if let Some(ref page_token) = next_page {
+                format!(
+                    "https://api.anthropic.com/v1/organizations/cost_report?starting_at={}&group_by[]=workspace_id&group_by[]=description&limit=30&page={}",
+                    starting_at, page_token
+                )
+            } else {
+                format!(
+                    "https://api.anthropic.com/v1/organizations/cost_report?starting_at={}&group_by[]=workspace_id&group_by[]=description&limit=30",
+                    starting_at
+                )
+            };
 
-            match send_request_await_response(
-                http::Method::GET,
-                url.clone(),
-                Some(headers.clone()),
-                30000, // 30 second timeout
-                vec![]
-            ).await {
-                Ok(response) => {
-                    if response.status() == http::StatusCode::OK {
-                        let response_body = String::from_utf8_lossy(response.body());
-                        println!("Anthropic API response: {}", response_body);
+            println!("Fetching costs page {} from URL: {}", page_count, url_str);
 
-                        match serde_json::from_str::<AnthropicCostReport>(&response_body) {
-                            Ok(cost_report) => {
-                                println!("Successfully parsed cost report with {} data entries", cost_report.data.len());
-                                // Successfully got the cost report, process it
-                                return self.process_cost_report(cost_report, now.timestamp());
+            let url = Url::parse(&url_str).map_err(|e| format!("Invalid URL: {}", e))?;
+
+            // Retry logic for each page request
+            let mut attempts = 0;
+            let max_attempts = 3;
+            let mut last_error = String::new();
+            let mut page_fetched = false;
+
+            while attempts < max_attempts && !page_fetched {
+                attempts += 1;
+
+                match send_request_await_response(
+                    http::Method::GET,
+                    url.clone(),
+                    Some(headers.clone()),
+                    30000, // 30 second timeout
+                    vec![]
+                ).await {
+                    Ok(response) => {
+                        if response.status() == http::StatusCode::OK {
+                            let response_body = String::from_utf8_lossy(response.body());
+                            
+                            // Only log first 500 chars of response to avoid clutter
+                            if response_body.len() > 500 {
+                                println!("Anthropic API response (truncated): {}...", &response_body[..500]);
+                            } else {
+                                println!("Anthropic API response: {}", response_body);
                             }
-                            Err(e) => {
-                                last_error = format!("Failed to parse response: {}. Body: {}", e, response_body);
-                                println!("Parse error: {}", last_error);
+
+                            match serde_json::from_str::<AnthropicCostReport>(&response_body) {
+                                Ok(cost_report) => {
+                                    println!("Successfully parsed cost report page {} with {} data entries", 
+                                             page_count, cost_report.data.len());
+                                    
+                                    // Store the next page token if available
+                                    let has_more = cost_report.has_more;
+                                    next_page = cost_report.next_page.clone();
+                                    
+                                    // Add this page's data to our collection
+                                    all_cost_reports.push(cost_report);
+                                    page_fetched = true;
+                                    
+                                    // Check if we need to fetch more pages
+                                    if !has_more || next_page.is_none() {
+                                        println!("Reached last page of cost reports (total pages: {})", page_count);
+                                        // Process all collected reports
+                                        return self.process_all_cost_reports(all_cost_reports, now.timestamp());
+                                    }
+                                }
+                                Err(e) => {
+                                    last_error = format!("Failed to parse response: {}. Body: {}", e, response_body);
+                                    println!("Parse error: {}", last_error);
+                                }
                             }
-                        }
-                    } else if response.status() == http::StatusCode::TOO_MANY_REQUESTS {
-                        last_error = format!("Rate limited, attempt {}/{}", attempts, max_attempts);
-                        // Wait longer for rate limiting
-                        if attempts < max_attempts {
-                            let wait_ms = 5000 * attempts as u64; // 5s, 10s, 15s
-                            println!("Rate limited, waiting {}ms before retry", wait_ms);
-                            set_timer(wait_ms, None);
-                        }
-                    } else {
-                        last_error = format!("API returned status {}: {}",
-                            response.status(),
-                            String::from_utf8_lossy(response.body())
-                        );
-                        // For non-retriable errors, break immediately
-                        if response.status() == http::StatusCode::UNAUTHORIZED ||
-                           response.status() == http::StatusCode::FORBIDDEN {
-                            break;
+                        } else if response.status() == http::StatusCode::TOO_MANY_REQUESTS {
+                            last_error = format!("Rate limited on page {}, attempt {}/{}", page_count, attempts, max_attempts);
+                            // Wait longer for rate limiting
+                            if attempts < max_attempts {
+                                let wait_ms = 5000 * attempts as u64; // 5s, 10s, 15s
+                                println!("Rate limited, waiting {}ms before retry", wait_ms);
+                                set_timer(wait_ms, None);
+                            }
+                        } else {
+                            last_error = format!("API returned status {}: {}",
+                                response.status(),
+                                String::from_utf8_lossy(response.body())
+                            );
+                            // For non-retriable errors, break immediately
+                            if response.status() == http::StatusCode::UNAUTHORIZED ||
+                               response.status() == http::StatusCode::FORBIDDEN {
+                                return Err(last_error);
+                            }
                         }
                     }
+                    Err(e) => {
+                        last_error = format!("HTTP request failed: {:?}", e);
+                    }
                 }
-                Err(e) => {
-                    last_error = format!("HTTP request failed: {:?}", e);
+
+                // Wait before retry (exponential backoff)
+                if attempts < max_attempts && !page_fetched {
+                    let wait_ms = 1000 * (2_u64.pow(attempts - 1)); // 1s, 2s, 4s
+                    println!("Request failed for page {}, waiting {}ms before retry", page_count, wait_ms);
+                    set_timer(wait_ms, None);
                 }
             }
 
-            // Wait before retry (exponential backoff)
-            if attempts < max_attempts {
-                let wait_ms = 1000 * (2_u64.pow(attempts - 1)); // 1s, 2s, 4s
-                println!("Request failed, waiting {}ms before retry", wait_ms);
-                set_timer(wait_ms, None);
+            // If we couldn't fetch this page after all retries, fail
+            if !page_fetched {
+                return Err(format!("Failed to fetch page {} after {} attempts: {}", 
+                                   page_count, attempts, last_error));
             }
         }
 
-        Err(format!("Failed after {} attempts: {}", attempts, last_error))
+        // If we somehow exit the loop without returning, process what we have
+        if !all_cost_reports.is_empty() {
+            self.process_all_cost_reports(all_cost_reports, now.timestamp())
+        } else {
+            Err("No cost reports fetched".to_string())
+        }
     }
 
-    fn process_cost_report(&mut self, cost_report: AnthropicCostReport, timestamp: i64) -> Result<usize, String> {
+    fn process_all_cost_reports(&mut self, cost_reports: Vec<AnthropicCostReport>, timestamp: i64) -> Result<usize, String> {
+        let mut total_costs_added = 0;
+        let mut latest_date: Option<String> = None;
+        
+        println!("Processing {} pages of cost reports", cost_reports.len());
+        
+        for (page_num, cost_report) in cost_reports.into_iter().enumerate() {
+            println!("Processing page {} with {} data entries", page_num + 1, cost_report.data.len());
+            
+            // Track the latest date we've seen
+            for data in &cost_report.data {
+                if let Some(ref current_latest) = latest_date {
+                    if data.ending_at > *current_latest {
+                        latest_date = Some(data.ending_at.clone());
+                    }
+                } else {
+                    latest_date = Some(data.ending_at.clone());
+                }
+            }
+            
+            match self.process_cost_report(cost_report, timestamp) {
+                Ok(costs_added) => {
+                    total_costs_added += costs_added;
+                    println!("Added {} costs from page {}", costs_added, page_num + 1);
+                }
+                Err(e) => {
+                    println!("Warning: Failed to process page {}: {}", page_num + 1, e);
+                    // Continue processing other pages even if one fails
+                }
+            }
+        }
+        
+        // Store the latest date we've queried for next time
+        if let Some(latest) = latest_date {
+            // Ensure the date is in the correct format (YYYY-MM-DDTHH:MM:SSZ)
+            // If it already ends with Z, use as-is; otherwise parse and reformat
+            let formatted_date = if latest.ends_with('Z') {
+                latest
+            } else {
+                // Parse and reformat to ensure correct format
+                match chrono::DateTime::parse_from_rfc3339(&latest) {
+                    Ok(dt) => {
+                        let utc_dt = dt.with_timezone(&Utc);
+                        format!("{}Z", utc_dt.format("%Y-%m-%dT%H:%M:%S"))
+                    }
+                    Err(_) => {
+                        // If parsing fails, keep the original but warn
+                        println!("WARNING: Could not parse ending_at date '{}', storing as-is", latest);
+                        latest
+                    }
+                }
+            };
+            
+            println!("Updating last_cost_query_date to: {}", formatted_date);
+            self.last_cost_query_date = Some(formatted_date);
+        }
+        
+        println!("Total costs added across all pages: {}. Total costs in system: {}", 
+                 total_costs_added, self.all_costs.len());
+        Ok(total_costs_added)
+    }
+
+    fn process_cost_report(&mut self, cost_report: AnthropicCostReport, _query_timestamp: i64) -> Result<usize, String> {
         let mut costs_added = 0;
 
         println!("Processing cost report with {} data entries", cost_report.data.len());
@@ -640,29 +789,44 @@ impl AnthropicApiKeyManagerState {
             println!("Processing data entry from {} to {} with {} results",
                      data.starting_at, data.ending_at, data.results.len());
 
+            // Parse the starting_at timestamp to use as the cost incurred timestamp
+            let cost_timestamp = chrono::DateTime::parse_from_rfc3339(&data.starting_at)
+                .map(|dt| dt.timestamp())
+                .unwrap_or_else(|e| {
+                    println!("Warning: Failed to parse starting_at timestamp '{}': {}", data.starting_at, e);
+                    // Fallback to current time if parsing fails
+                    Utc::now().timestamp()
+                });
+
             for result in data.results {
-                // Try to parse the amount
-                let amount = result.amount.parse::<f64>().unwrap_or(0.0);
-                println!("Cost result: {} {} - {}", amount, result.currency, result.description);
+                // Parse the amount - API returns cents as a decimal string (e.g., "123.45" = 123.45 cents = $1.2345)
+                let amount_in_cents = result.amount.parse::<f64>().unwrap_or(0.0);
+                // Convert cents to dollars
+                let amount_in_dollars = amount_in_cents / 100.0;
+                let description = result.description.clone().unwrap_or_else(|| "Unknown".to_string());
+                println!("Cost result: {} cents (${:.4}) {} - {} (incurred at {})", 
+                         amount_in_cents, amount_in_dollars, result.currency, description, data.starting_at);
 
                 // Skip zero amounts
-                if amount == 0.0 {
+                if amount_in_cents == 0.0 {
                     continue;
                 }
 
                 // Find which key this cost belongs to (if any)
                 // For now, we'll aggregate all costs since we don't have workspace mapping
+                // Store the amount in dollars for consistency
                 let record = CostRecord {
-                    timestamp,
-                    amount,
+                    timestamp: cost_timestamp,  // Use the actual cost incurred timestamp
+                    amount: amount_in_dollars,  // Store as dollars
                     currency: result.currency,
-                    description: result.description,
+                    description,
                 };
 
                 // Add to global costs
                 self.all_costs.push(record.clone());
                 costs_added += 1;
-                println!("Added cost record: {} {} at timestamp {}", amount, record.currency, timestamp);
+                println!("Added cost record: ${:.4} {} incurred at {}", 
+                         amount_in_dollars, record.currency, data.starting_at);
 
                 // Also add to per-key costs if we have active keys
                 for key in self.active_keys.iter() {

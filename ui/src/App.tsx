@@ -369,6 +369,31 @@ const AdminPanel: React.FC = () => {
     }
   };
   
+  const handleResetCosts = async () => {
+    if (!window.confirm('Are you sure you want to reset all cost data? This will clear all historical data and fetch fresh data from the API.')) {
+      return;
+    }
+    
+    try {
+      const response = await api.reset_costs();
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to reset costs');
+      }
+      setMessage('Cost data reset successfully. You can now refresh to fetch fresh data.');
+      
+      // Clear the local store data
+      useApiKeyManagerStore.getState().setCostData([]);
+      useApiKeyManagerStore.getState().setTotalCosts({
+        total_cost: 0,
+        cost_by_key: [],
+        currency: 'USD'
+      });
+    } catch (error) {
+      console.error('Failed to reset costs:', error);
+      setMessage('Failed to reset cost data');
+    }
+  };
+  
   const loadCosts = async () => {
     try {
       const response = await api.get_total_costs({ start_date: null, end_date: null });
@@ -418,10 +443,15 @@ const AdminPanel: React.FC = () => {
       {adminKeySet && (
         <div className="admin-actions">
           <h3>Cost Management</h3>
-          <button onClick={handleRefreshCosts} className="btn btn-primary">
-            Refresh Costs
-          </button>
-          <p className="admin-message">{message}</p>
+          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+            <button onClick={handleRefreshCosts} className="btn btn-primary">
+              Refresh Costs
+            </button>
+            <button onClick={handleResetCosts} className="btn btn-danger">
+              Reset Plots
+            </button>
+          </div>
+          {message && <p className="admin-message">{message}</p>}
         </div>
       )}
     </div>
