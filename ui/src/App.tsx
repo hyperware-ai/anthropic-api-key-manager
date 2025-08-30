@@ -293,7 +293,6 @@ const KeyList: React.FC = () => {
           <tr>
             <th>API Key</th>
             <th>Status</th>
-            <th>Total Cost</th>
             <th>Nodes</th>
             <th>Actions</th>
           </tr>
@@ -307,15 +306,8 @@ const KeyList: React.FC = () => {
               <td>
                 <span className={`status ${key.status}`}>{key.status}</span>
               </td>
-              <td>${key.total_cost.toFixed(2)}</td>
               <td>{key.assigned_nodes.length}</td>
               <td>
-                <button 
-                  onClick={() => setSelectedKey(key.key)}
-                  className="btn btn-sm"
-                >
-                  View
-                </button>
                 <button 
                   onClick={() => handleRemoveKey(key.key)}
                   className="btn btn-sm btn-danger"

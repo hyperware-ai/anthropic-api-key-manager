@@ -302,9 +302,8 @@ impl AnthropicApiKeyManagerState {
                     .map(|n| n.clone())
                     .unwrap_or_default();
 
-                let total_cost = self.key_costs.get(key)
-                    .map(|costs| costs.iter().map(|c| c.amount).sum())
-                    .unwrap_or(0.0);
+                // We cannot track costs per individual API key from the Anthropic API
+                let total_cost = 0.0;
 
                 ApiKeyInfo {
                     key: key.clone(),
@@ -337,9 +336,8 @@ impl AnthropicApiKeyManagerState {
             .map(|n| n.clone())
             .unwrap_or_default();
 
-        let total_cost = self.key_costs.get(&request.api_key)
-            .map(|costs| costs.iter().map(|c| c.amount).sum::<f64>())
-            .unwrap_or(0.0);
+        // We cannot track costs per individual API key from the Anthropic API
+        let total_cost = 0.0;
 
         Ok(KeyStatusResponse {
             status: status.to_string(),
@@ -351,20 +349,14 @@ impl AnthropicApiKeyManagerState {
     #[http]
     async fn get_total_costs(&self, request: CostRangeRequest) -> Result<TotalCostsResponse, String> {
 
-        let mut total_cost = 0.0;
-        let mut cost_by_key: Vec<(String, f64)> = Vec::new();
+        // Calculate total cost from all_costs based on date range
+        let total_cost: f64 = self.all_costs.iter()
+            .filter(|c| self.filter_by_date(c.timestamp, &request.start_date, &request.end_date))
+            .map(|c| c.amount)
+            .sum();
 
-        for (key, costs) in &self.key_costs {
-            let key_total: f64 = costs.iter()
-                .filter(|c| self.filter_by_date(c.timestamp, &request.start_date, &request.end_date))
-                .map(|c| c.amount)
-                .sum();
-
-            if key_total > 0.0 {
-                cost_by_key.push((key.clone(), key_total));
-                total_cost += key_total;
-            }
-        }
+        // We cannot track costs per individual API key from the Anthropic API
+        let cost_by_key: Vec<(String, f64)> = Vec::new();
 
         Ok(TotalCostsResponse {
             total_cost,
@@ -376,16 +368,9 @@ impl AnthropicApiKeyManagerState {
     #[http]
     async fn get_key_costs(&self, request: KeyCostRequest) -> Result<KeyCostsResponse, String> {
 
-        let costs = self.key_costs.get(&request.api_key)
-            .map(|costs| {
-                costs.iter()
-                    .filter(|c| self.filter_by_date(c.timestamp, &request.start_date, &request.end_date))
-                    .cloned()
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-
-        let total: f64 = costs.iter().map(|c| c.amount).sum();
+        // We cannot track costs per individual API key from the Anthropic API
+        let costs: Vec<CostRecord> = Vec::new();
+        let total: f64 = 0.0;
 
         Ok(KeyCostsResponse {
             api_key: request.api_key,
@@ -862,13 +847,9 @@ impl AnthropicApiKeyManagerState {
                 println!("Added cost record: ${:.4} {} incurred at {}",
                          amount_in_dollars, record.currency, data.starting_at);
 
-                // Also add to per-key costs if we have active keys
-                for key in self.active_keys.iter() {
-                    self.key_costs
-                        .entry(key.clone())
-                        .or_insert_with(Vec::new)
-                        .push(record.clone());
-                }
+                // Note: We cannot map costs to individual API keys from the Anthropic API
+                // The workspace_id field doesn't directly map to individual API keys
+                // So we only track global costs, not per-key costs
             }
         }
 
