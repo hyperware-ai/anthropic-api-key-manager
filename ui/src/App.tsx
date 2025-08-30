@@ -339,17 +339,27 @@ const AdminPanel: React.FC = () => {
   
   const handleSetAdminKey = async () => {
     if (!adminKey.trim()) return;
+    
+    const isUpdating = adminKeySet;
+    
     try {
       const response = await api.set_admin_key({ admin_key: adminKey });
       if (!response.success) {
         throw new Error(response.message || 'Failed to set admin key');
       }
       setAdminKey('');
-      setMessage('Admin key set successfully');
+      setMessage(isUpdating ? 'Admin key updated successfully' : 'Admin key set successfully');
       useApiKeyManagerStore.getState().setAdminKeySet(true);
+      
+      // If updating an existing key, suggest refreshing costs
+      if (isUpdating) {
+        setTimeout(() => {
+          setMessage('Admin key updated. You may want to refresh costs with the new key.');
+        }, 2000);
+      }
     } catch (error) {
       console.error('Error setting admin key:', error);
-      setMessage('Failed to set admin key');
+      setMessage(isUpdating ? 'Failed to update admin key' : 'Failed to set admin key');
     }
   };
   
@@ -423,22 +433,29 @@ const AdminPanel: React.FC = () => {
     <div className="admin-panel">
       <h2>Admin Settings</h2>
       
-      {!adminKeySet && (
-        <div className="admin-key-form">
-          <h3>Set Admin API Key</h3>
-          <p>Enter your Anthropic admin API key to enable cost tracking</p>
-          <input
-            type="password"
-            value={adminKey}
-            onChange={(e) => setAdminKey(e.target.value)}
-            placeholder="sk-ant-..."
-            className="key-input"
-          />
-          <button onClick={handleSetAdminKey} className="btn btn-primary">
-            Set Admin Key
-          </button>
-        </div>
-      )}
+      <div className="admin-key-form">
+        <h3>{adminKeySet ? 'Update Admin API Key' : 'Set Admin API Key'}</h3>
+        <p>
+          {adminKeySet 
+            ? 'Enter a new Anthropic admin API key to replace the existing one'
+            : 'Enter your Anthropic admin API key to enable cost tracking'}
+        </p>
+        <input
+          type="password"
+          value={adminKey}
+          onChange={(e) => setAdminKey(e.target.value)}
+          placeholder="sk-ant-..."
+          className="key-input"
+        />
+        <button onClick={handleSetAdminKey} className="btn btn-primary">
+          {adminKeySet ? 'Update Admin Key' : 'Set Admin Key'}
+        </button>
+        {adminKeySet && (
+          <p style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+            ✓ Admin key is currently set
+          </p>
+        )}
+      </div>
       
       {adminKeySet && (
         <div className="admin-actions">

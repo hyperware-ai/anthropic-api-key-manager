@@ -580,8 +580,21 @@ impl AnthropicApiKeyManagerState {
 
         // Use the last query date if available, otherwise start from 30 days ago
         let starting_at = if let Some(ref last_date) = self.last_cost_query_date {
-            // Start from the last date we queried (should already be in correct format)
-            last_date.clone()
+            // Validate that it's a proper date format, not a page token or corrupted data
+            // Page tokens are base64 encoded and don't contain 'T' or '-' characters in the expected positions
+            if last_date.len() >= 19 && 
+               last_date.chars().nth(4) == Some('-') && 
+               last_date.chars().nth(7) == Some('-') && 
+               last_date.chars().nth(10) == Some('T') {
+                // Looks like a valid date format
+                last_date.clone()
+            } else {
+                // Invalid format detected (possibly a page token), reset to default
+                println!("WARNING: Invalid last_cost_query_date format detected: '{}', resetting to 30 days ago", last_date);
+                self.last_cost_query_date = None; // Clear the corrupted value
+                let thirty_days_ago = now - chrono::Duration::days(30);
+                format!("{}Z", thirty_days_ago.format("%Y-%m-%dT%H:%M:%S"))
+            }
         } else {
             // Default to 30 days ago for initial fetch
             let thirty_days_ago = now - chrono::Duration::days(30);
@@ -762,27 +775,38 @@ impl AnthropicApiKeyManagerState {
 
         // Store the latest date we've queried for next time
         if let Some(latest) = latest_date {
-            // Ensure the date is in the correct format (YYYY-MM-DDTHH:MM:SSZ)
-            // If it already ends with Z, use as-is; otherwise parse and reformat
-            let formatted_date = if latest.ends_with('Z') {
-                latest
+            // Validate this is actually a date and not something else (like a page token)
+            let is_valid_date = latest.len() >= 19 && 
+                               latest.chars().nth(4) == Some('-') && 
+                               latest.chars().nth(7) == Some('-') && 
+                               latest.chars().nth(10) == Some('T');
+            
+            if !is_valid_date {
+                println!("WARNING: Refusing to store invalid date format as last_cost_query_date: '{}'", latest);
+                // Don't update last_cost_query_date with invalid data
             } else {
-                // Parse and reformat to ensure correct format
-                match chrono::DateTime::parse_from_rfc3339(&latest) {
-                    Ok(dt) => {
-                        let utc_dt = dt.with_timezone(&Utc);
-                        format!("{}Z", utc_dt.format("%Y-%m-%dT%H:%M:%S"))
+                // Ensure the date is in the correct format (YYYY-MM-DDTHH:MM:SSZ)
+                // If it already ends with Z, use as-is; otherwise parse and reformat
+                let formatted_date = if latest.ends_with('Z') {
+                    latest
+                } else {
+                    // Parse and reformat to ensure correct format
+                    match chrono::DateTime::parse_from_rfc3339(&latest) {
+                        Ok(dt) => {
+                            let utc_dt = dt.with_timezone(&Utc);
+                            format!("{}Z", utc_dt.format("%Y-%m-%dT%H:%M:%S"))
+                        }
+                        Err(_) => {
+                            // If parsing fails, don't store it
+                            println!("WARNING: Could not parse ending_at date '{}', not storing", latest);
+                            return Ok(total_costs_added); // Exit early without updating
+                        }
                     }
-                    Err(_) => {
-                        // If parsing fails, keep the original but warn
-                        println!("WARNING: Could not parse ending_at date '{}', storing as-is", latest);
-                        latest
-                    }
-                }
-            };
-
-            println!("Updating last_cost_query_date to: {}", formatted_date);
-            self.last_cost_query_date = Some(formatted_date);
+                };
+                
+                println!("Updating last_cost_query_date to: {}", formatted_date);
+                self.last_cost_query_date = Some(formatted_date);
+            }
         }
 
         println!("Total costs added across all pages: {}. Total costs in system: {}",
