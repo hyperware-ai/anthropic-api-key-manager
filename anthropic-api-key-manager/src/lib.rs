@@ -17,15 +17,25 @@ use url::Url;
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct AnthropicApiKeyManagerState {
+    #[serde(default)]
     admin_api_key: Option<String>,
+    #[serde(default)]
     active_keys: HashSet<String>,
+    #[serde(default)]
     historical_keys: HashSet<String>,
+    #[serde(default)]
     key_to_nodes: HashMap<String, Vec<String>>,
+    #[serde(default)]
     node_issue_times: HashMap<String, i64>,
+    #[serde(default)]
     key_costs: HashMap<String, Vec<CostRecord>>,
+    #[serde(default)]
     all_costs: Vec<CostRecord>,  // Store all costs globally
+    #[serde(default)]
     last_cost_check: Option<i64>,
+    #[serde(default)]
     last_cost_query_date: Option<String>,  // Store the last date we queried up to (RFC3339 format)
+    #[serde(default)]
     ui_auth_token: Option<String>,
 }
 
@@ -150,7 +160,7 @@ struct CostReportData {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct CostReportResult {
-    currency: String,              // Always "USD" 
+    currency: String,              // Always "USD"
     amount: String,                // Amount in cents as decimal string (e.g., "123.45" = $1.2345)
     workspace_id: Option<String>,
     description: Option<String>,   // Made optional since it can be null when not grouping by description
@@ -567,7 +577,7 @@ impl AnthropicApiKeyManagerState {
             .ok_or("Admin API key not configured")?;
 
         let now = Utc::now();
-        
+
         // Use the last query date if available, otherwise start from 30 days ago
         let starting_at = if let Some(ref last_date) = self.last_cost_query_date {
             // Start from the last date we queried (should already be in correct format)
@@ -578,9 +588,9 @@ impl AnthropicApiKeyManagerState {
             // Format as UTC with Z suffix (e.g., "2025-08-01T00:00:00Z")
             format!("{}Z", thirty_days_ago.format("%Y-%m-%dT%H:%M:%S"))
         };
-        
+
         println!("Fetching costs starting from: {}", starting_at);
-        
+
         // Collect all cost reports across pages
         let mut all_cost_reports = Vec::new();
         let mut next_page: Option<String> = None;
@@ -637,7 +647,7 @@ impl AnthropicApiKeyManagerState {
                     Ok(response) => {
                         if response.status() == http::StatusCode::OK {
                             let response_body = String::from_utf8_lossy(response.body());
-                            
+
                             // Only log first 500 chars of response to avoid clutter
                             if response_body.len() > 500 {
                                 println!("Anthropic API response (truncated): {}...", &response_body[..500]);
@@ -647,17 +657,17 @@ impl AnthropicApiKeyManagerState {
 
                             match serde_json::from_str::<AnthropicCostReport>(&response_body) {
                                 Ok(cost_report) => {
-                                    println!("Successfully parsed cost report page {} with {} data entries", 
+                                    println!("Successfully parsed cost report page {} with {} data entries",
                                              page_count, cost_report.data.len());
-                                    
+
                                     // Store the next page token if available
                                     let has_more = cost_report.has_more;
                                     next_page = cost_report.next_page.clone();
-                                    
+
                                     // Add this page's data to our collection
                                     all_cost_reports.push(cost_report);
                                     page_fetched = true;
-                                    
+
                                     // Check if we need to fetch more pages
                                     if !has_more || next_page.is_none() {
                                         println!("Reached last page of cost reports (total pages: {})", page_count);
@@ -705,7 +715,7 @@ impl AnthropicApiKeyManagerState {
 
             // If we couldn't fetch this page after all retries, fail
             if !page_fetched {
-                return Err(format!("Failed to fetch page {} after {} attempts: {}", 
+                return Err(format!("Failed to fetch page {} after {} attempts: {}",
                                    page_count, attempts, last_error));
             }
         }
@@ -721,12 +731,12 @@ impl AnthropicApiKeyManagerState {
     fn process_all_cost_reports(&mut self, cost_reports: Vec<AnthropicCostReport>, timestamp: i64) -> Result<usize, String> {
         let mut total_costs_added = 0;
         let mut latest_date: Option<String> = None;
-        
+
         println!("Processing {} pages of cost reports", cost_reports.len());
-        
+
         for (page_num, cost_report) in cost_reports.into_iter().enumerate() {
             println!("Processing page {} with {} data entries", page_num + 1, cost_report.data.len());
-            
+
             // Track the latest date we've seen
             for data in &cost_report.data {
                 if let Some(ref current_latest) = latest_date {
@@ -737,7 +747,7 @@ impl AnthropicApiKeyManagerState {
                     latest_date = Some(data.ending_at.clone());
                 }
             }
-            
+
             match self.process_cost_report(cost_report, timestamp) {
                 Ok(costs_added) => {
                     total_costs_added += costs_added;
@@ -749,7 +759,7 @@ impl AnthropicApiKeyManagerState {
                 }
             }
         }
-        
+
         // Store the latest date we've queried for next time
         if let Some(latest) = latest_date {
             // Ensure the date is in the correct format (YYYY-MM-DDTHH:MM:SSZ)
@@ -770,12 +780,12 @@ impl AnthropicApiKeyManagerState {
                     }
                 }
             };
-            
+
             println!("Updating last_cost_query_date to: {}", formatted_date);
             self.last_cost_query_date = Some(formatted_date);
         }
-        
-        println!("Total costs added across all pages: {}. Total costs in system: {}", 
+
+        println!("Total costs added across all pages: {}. Total costs in system: {}",
                  total_costs_added, self.all_costs.len());
         Ok(total_costs_added)
     }
@@ -804,7 +814,7 @@ impl AnthropicApiKeyManagerState {
                 // Convert cents to dollars
                 let amount_in_dollars = amount_in_cents / 100.0;
                 let description = result.description.clone().unwrap_or_else(|| "Unknown".to_string());
-                println!("Cost result: {} cents (${:.4}) {} - {} (incurred at {})", 
+                println!("Cost result: {} cents (${:.4}) {} - {} (incurred at {})",
                          amount_in_cents, amount_in_dollars, result.currency, description, data.starting_at);
 
                 // Skip zero amounts
@@ -825,7 +835,7 @@ impl AnthropicApiKeyManagerState {
                 // Add to global costs
                 self.all_costs.push(record.clone());
                 costs_added += 1;
-                println!("Added cost record: ${:.4} {} incurred at {}", 
+                println!("Added cost record: ${:.4} {} incurred at {}",
                          amount_in_dollars, record.currency, data.starting_at);
 
                 // Also add to per-key costs if we have active keys
