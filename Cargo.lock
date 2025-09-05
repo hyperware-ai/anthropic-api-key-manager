@@ -590,9 +590,9 @@ dependencies = [
 name = "anthropic-api-key-manager"
 version = "0.1.0"
 dependencies = [
+ "anthropic_api_key_manager_caller_utils",
  "anyhow",
  "base64",
- "caller-utils",
  "chrono",
  "http",
  "hyperprocess_macro",
@@ -603,6 +603,22 @@ dependencies = [
  "serde_json",
  "url",
  "wit-bindgen 0.42.1",
+]
+
+[[package]]
+name = "anthropic_api_key_manager_caller_utils"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "futures-util",
+ "hyperware_process_lib",
+ "once_cell",
+ "process_macros",
+ "serde",
+ "serde_json",
+ "uuid",
+ "wit-bindgen 0.41.0",
 ]
 
 [[package]]
@@ -948,22 +964,6 @@ dependencies = [
  "libc",
  "once_cell",
  "serde",
-]
-
-[[package]]
-name = "caller-utils"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "futures",
- "futures-util",
- "hyperware_process_lib",
- "once_cell",
- "process_macros",
- "serde",
- "serde_json",
- "uuid",
- "wit-bindgen 0.41.0",
 ]
 
 [[package]]
