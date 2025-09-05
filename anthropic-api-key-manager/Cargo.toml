@@ -2,15 +2,16 @@
 anyhow = "1.0"
 base64 = "0.22"
 http = "1.1"
+hyperware_process_lib = { git = "https://github.com/hyperware-ai/process_lib", features = ["hyperapp"], rev = "b9f1ead" }
 process_macros = "0.1"
 rand = "0.8"
 serde_json = "1.0"
 url = "2.5"
 wit-bindgen = "0.42.1"
 
-[dependencies.anthropic_api_key_manager_caller_utils]
+[dependencies.caller-utils]
 optional = true
-path = "../target/anthropic-api-key-manager-caller-utils"
+path = "../target/caller-utils"
 
 [dependencies.chrono]
 features = ["serde"]
@@ -20,17 +21,11 @@ version = "0.4"
 git = "https://github.com/hyperware-ai/hyperprocess-macro"
 rev = "ac43744"
 
-[dependencies.hyperware_process_lib]
-features = ["hyperapp"]
-git = "https://github.com/hyperware-ai/process_lib"
-rev = "b9f1ead"
-
 [dependencies.serde]
 features = ["derive"]
 version = "1.0"
 
 [features]
-caller-utils = ["anthropic_api_key_manager_caller_utils"]
 simulation-mode = []
 
 [lib]

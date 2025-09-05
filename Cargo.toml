@@ -6,6 +6,6 @@ panic = "abort"
 [workspace]
 members = [
     "anthropic-api-key-manager",
-    "target/anthropic-api-key-manager-caller-util?",
+    "target/caller-util?",
 ]
 resolver = "2"
