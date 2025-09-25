@@ -57,28 +57,28 @@ struct ApiKeyInfo {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct AddKeyRequest {
+struct AddKeyReq {
     api_key: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct RemoveKeyRequest {
+struct RemoveKeyReq {
     api_key: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct KeyStatusRequest {
+struct KeyStatusReq {
     api_key: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct CostRangeRequest {
+struct CostRangeReq {
     start_date: Option<String>,
     end_date: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct KeyCostRequest {
+struct KeyCostReq {
     api_key: String,
     start_date: Option<String>,
     end_date: Option<String>,
@@ -98,46 +98,46 @@ struct NodeAssignment {
 
 // Response types
 #[derive(Debug, Serialize, Deserialize)]
-struct SuccessResponse {
+struct SuccessRes {
     success: bool,
     message: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct AdminKeyStatusResponse {
+struct AdminKeyStatusRes {
     has_admin_key: bool,
     key_prefix: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct AuthResponse {
+struct AuthRes {
     token: String,
     has_admin_key: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct KeyStatusResponse {
+struct KeyStatusRes {
     status: String,
     assigned_nodes: Vec<String>,
     total_cost: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct TotalCostsResponse {
+struct TotalCostsRes {
     total_cost: f64,
     cost_by_key: Vec<(String, f64)>,  // Changed from HashMap to Vec of tuples for TypeScript compatibility
     currency: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct KeyCostsResponse {
+struct KeyCostsRes {
     api_key: String,
     costs: Vec<CostRecord>,
     total: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct CostsRefreshResponse {
+struct CostsRefreshRes {
     success: bool,
     message: String,
     timestamp: i64,
@@ -265,21 +265,21 @@ impl AnthropicApiKeyManagerState {
     }
 
     #[http]
-    async fn add_api_key(&mut self, request: AddKeyRequest) -> Result<SuccessResponse, String> {
+    async fn add_api_key(&mut self, request: AddKeyReq) -> Result<SuccessRes, String> {
         if self.active_keys.contains(&request.api_key) {
             return Err("API key already exists".to_string());
         }
 
         self.active_keys.insert(request.api_key.clone());
 
-        Ok(SuccessResponse {
+        Ok(SuccessRes {
             success: true,
             message: "API key added successfully".to_string(),
         })
     }
 
     #[http]
-    async fn remove_api_key(&mut self, request: RemoveKeyRequest) -> Result<SuccessResponse, String> {
+    async fn remove_api_key(&mut self, request: RemoveKeyReq) -> Result<SuccessRes, String> {
         if !self.active_keys.contains(&request.api_key) {
             return Err("API key not found".to_string());
         }
@@ -287,7 +287,7 @@ impl AnthropicApiKeyManagerState {
         self.active_keys.remove(&request.api_key);
         self.historical_keys.insert(request.api_key.clone());
 
-        Ok(SuccessResponse {
+        Ok(SuccessRes {
             success: true,
             message: "API key removed successfully".to_string(),
         })
@@ -319,7 +319,7 @@ impl AnthropicApiKeyManagerState {
     }
 
     #[http]
-    async fn get_key_status(&self, request: KeyStatusRequest) -> Result<KeyStatusResponse, String> {
+    async fn get_key_status(&self, request: KeyStatusReq) -> Result<KeyStatusRes, String> {
 
         let is_active = self.active_keys.contains(&request.api_key);
         let is_historical = self.historical_keys.contains(&request.api_key);
@@ -339,7 +339,7 @@ impl AnthropicApiKeyManagerState {
         // We cannot track costs per individual API key from the Anthropic API
         let total_cost = 0.0;
 
-        Ok(KeyStatusResponse {
+        Ok(KeyStatusRes {
             status: status.to_string(),
             assigned_nodes: nodes,
             total_cost,
@@ -347,7 +347,7 @@ impl AnthropicApiKeyManagerState {
     }
 
     #[http]
-    async fn get_total_costs(&self, request: CostRangeRequest) -> Result<TotalCostsResponse, String> {
+    async fn get_total_costs(&self, request: CostRangeReq) -> Result<TotalCostsRes, String> {
 
         // Calculate total cost from all_costs based on date range
         let total_cost: f64 = self.all_costs.iter()
@@ -358,7 +358,7 @@ impl AnthropicApiKeyManagerState {
         // We cannot track costs per individual API key from the Anthropic API
         let cost_by_key: Vec<(String, f64)> = Vec::new();
 
-        Ok(TotalCostsResponse {
+        Ok(TotalCostsRes {
             total_cost,
             cost_by_key,
             currency: "USD".to_string(),
@@ -366,13 +366,13 @@ impl AnthropicApiKeyManagerState {
     }
 
     #[http]
-    async fn get_key_costs(&self, request: KeyCostRequest) -> Result<KeyCostsResponse, String> {
+    async fn get_key_costs(&self, request: KeyCostReq) -> Result<KeyCostsRes, String> {
 
         // We cannot track costs per individual API key from the Anthropic API
         let costs: Vec<CostRecord> = Vec::new();
         let total: f64 = 0.0;
 
-        Ok(KeyCostsResponse {
+        Ok(KeyCostsRes {
             api_key: request.api_key,
             costs,
             total,
@@ -400,21 +400,21 @@ impl AnthropicApiKeyManagerState {
     }
 
     #[http]
-    async fn set_admin_key(&mut self, request: SetAdminKeyParams) -> Result<SuccessResponse, String> {
+    async fn set_admin_key(&mut self, request: SetAdminKeyParams) -> Result<SuccessRes, String> {
         self.admin_api_key = Some(request.admin_key.clone());
 
         // Log for debugging
         println!("Admin key set: {}", if request.admin_key.starts_with("sk-") { "sk-***" } else { "invalid format" });
 
-        Ok(SuccessResponse {
+        Ok(SuccessRes {
             success: true,
             message: "Admin key set successfully".to_string(),
         })
     }
 
     #[http]
-    async fn check_admin_key(&self) -> Result<AdminKeyStatusResponse, String> {
-        Ok(AdminKeyStatusResponse {
+    async fn check_admin_key(&self) -> Result<AdminKeyStatusRes, String> {
+        Ok(AdminKeyStatusRes {
             has_admin_key: self.admin_api_key.is_some(),
             key_prefix: self.admin_api_key.as_ref().map(|k| {
                 if k.starts_with("sk-") {
@@ -427,14 +427,14 @@ impl AnthropicApiKeyManagerState {
     }
 
     #[http]
-    async fn initialize_auth(&mut self) -> Result<AuthResponse, String> {
+    async fn initialize_auth(&mut self) -> Result<AuthRes, String> {
         if self.ui_auth_token.is_none() {
             let token = BASE64.encode(format!("{:x}", rand::random::<u128>()));
             self.ui_auth_token = Some(token.clone());
         }
 
         // Include admin key status in response
-        Ok(AuthResponse {
+        Ok(AuthRes {
             token: self.ui_auth_token.as_ref().unwrap().clone(),
             has_admin_key: self.admin_api_key.is_some(),
         })
@@ -456,7 +456,7 @@ impl AnthropicApiKeyManagerState {
     }
 
     #[http]
-    async fn refresh_costs(&mut self) -> Result<CostsRefreshResponse, String> {
+    async fn refresh_costs(&mut self) -> Result<CostsRefreshRes, String> {
         if self.admin_api_key.is_none() {
             return Err("Admin API key not configured".to_string());
         }
@@ -474,7 +474,7 @@ impl AnthropicApiKeyManagerState {
             // But allow negative time_since_last (which means timestamp is in future - a bug we're fixing)
             if time_since_last < 60 && time_since_last > 0 {
                 println!("Rate limiting: costs were refreshed {} seconds ago", time_since_last);
-                return Ok(CostsRefreshResponse {
+                return Ok(CostsRefreshRes {
                     success: false,
                     message: format!("Costs were recently refreshed {} seconds ago", time_since_last),
                     timestamp: last_check,
@@ -492,7 +492,7 @@ impl AnthropicApiKeyManagerState {
         match self.fetch_costs_from_anthropic().await {
             Ok(costs_added) => {
                 self.last_cost_check = Some(now);
-                Ok(CostsRefreshResponse {
+                Ok(CostsRefreshRes {
                     success: true,
                     message: format!("Costs refreshed successfully. Added {} cost records", costs_added),
                     timestamp: now,
@@ -506,7 +506,7 @@ impl AnthropicApiKeyManagerState {
     }
 
     #[http]
-    async fn reset_costs(&mut self) -> Result<SuccessResponse, String> {
+    async fn reset_costs(&mut self) -> Result<SuccessRes, String> {
         if self.admin_api_key.is_none() {
             return Err("Admin API key not configured".to_string());
         }
@@ -519,7 +519,7 @@ impl AnthropicApiKeyManagerState {
 
         println!("Cost data reset. All historical cost data cleared.");
 
-        Ok(SuccessResponse {
+        Ok(SuccessRes {
             success: true,
             message: "Cost data reset successfully. All historical data cleared.".to_string(),
         })

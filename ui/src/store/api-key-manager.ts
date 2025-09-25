@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import { CostData, KeyCostData } from '../types/api-key-manager';
-import { ApiKeyInfo as ApiKey, CostRecord, NodeAssignment } from '../../../target/ui/caller-utils';
+import { AnthropicApiKeyManager } from '../../../target/ui/caller-utils';
+
+type ApiKey = AnthropicApiKeyManager.ApiKeyInfo;
+type CostRecord = AnthropicApiKeyManager.CostRecord;
+type NodeAssignment = AnthropicApiKeyManager.NodeAssignment;
 
 interface ApiKeyManagerStore {
   // State

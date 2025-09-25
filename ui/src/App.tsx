@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import './App.css';
 import { useApiKeyManagerStore } from './store/api-key-manager';
-import * as api from '../../target/ui/caller-utils';
+import { AnthropicApiKeyManager } from '../../target/ui/caller-utils';
 import { ChartDataPoint } from './types/api-key-manager';
-import { CostRecord, NodeAssignment, ApiKeyInfo as ApiKey } from '../../target/ui/caller-utils';
+
+type CostRecord = AnthropicApiKeyManager.CostRecord;
+type NodeAssignment = AnthropicApiKeyManager.NodeAssignment;
+type ApiKey = AnthropicApiKeyManager.ApiKeyInfo;
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, Label, Dot
@@ -242,7 +245,7 @@ const KeyList: React.FC = () => {
   const handleAddKey = async () => {
     if (!newKey.trim()) return;
     try {
-      const response = await api.add_api_key({ api_key: newKey });
+      const response = await AnthropicApiKeyManager.add_api_key({ api_key: newKey });
       if (!response.success) {
         throw new Error(response.message || 'Failed to add key');
       }
@@ -255,7 +258,7 @@ const KeyList: React.FC = () => {
   
   const handleRemoveKey = async (key: string) => {
     try {
-      const response = await api.remove_api_key({ api_key: key });
+      const response = await AnthropicApiKeyManager.remove_api_key({ api_key: key });
       if (!response.success) {
         throw new Error(response.message || 'Failed to remove key');
       }
@@ -267,7 +270,7 @@ const KeyList: React.FC = () => {
   
   const refreshKeys = async () => {
     try {
-      const response = await api.list_keys();
+      const response = await AnthropicApiKeyManager.list_keys();
       const keys: ApiKey[] = response;
       useApiKeyManagerStore.getState().setApiKeys(keys);
     } catch (error) {
@@ -335,7 +338,7 @@ const AdminPanel: React.FC = () => {
     const isUpdating = adminKeySet;
     
     try {
-      const response = await api.set_admin_key({ admin_key: adminKey });
+      const response = await AnthropicApiKeyManager.set_admin_key({ admin_key: adminKey });
       if (!response.success) {
         throw new Error(response.message || 'Failed to set admin key');
       }
@@ -357,7 +360,7 @@ const AdminPanel: React.FC = () => {
   
   const handleRefreshCosts = async () => {
     try {
-      const response = await api.refresh_costs();
+      const response = await AnthropicApiKeyManager.refresh_costs();
       if (!response.success) {
         throw new Error(response.message || 'Failed to refresh costs');
       }
@@ -377,7 +380,7 @@ const AdminPanel: React.FC = () => {
     }
     
     try {
-      const response = await api.reset_costs();
+      const response = await AnthropicApiKeyManager.reset_costs();
       if (!response.success) {
         throw new Error(response.message || 'Failed to reset costs');
       }
@@ -398,7 +401,7 @@ const AdminPanel: React.FC = () => {
   
   const loadCosts = async () => {
     try {
-      const response = await api.get_total_costs({ start_date: null, end_date: null });
+      const response = await AnthropicApiKeyManager.get_total_costs({ start_date: null, end_date: null });
       // Convert TotalCostsResponse to CostData format
       const costs = {
         total_cost: response.total_cost,
@@ -413,7 +416,7 @@ const AdminPanel: React.FC = () => {
   
   const loadCostData = async () => {
     try {
-      const response = await api.get_all_costs();
+      const response = await AnthropicApiKeyManager.get_all_costs();
       const costData: CostRecord[] = response;
       useApiKeyManagerStore.getState().setCostData(costData);
     } catch (error) {
@@ -518,7 +521,7 @@ function App() {
       setLoading(true);
       try {
         // Initialize auth and check admin key status
-        const authResponse = await api.initialize_auth();
+        const authResponse = await AnthropicApiKeyManager.initialize_auth();
         const authData = authResponse;
         
         useApiKeyManagerStore.getState().setAuthToken(authData.token);
@@ -530,8 +533,8 @@ function App() {
         
         // Load initial data
         const [keysResponse, historyResponse] = await Promise.all([
-          api.list_keys(),
-          api.get_node_history()
+          AnthropicApiKeyManager.list_keys(),
+          AnthropicApiKeyManager.get_node_history()
         ]);
         
         const keys: ApiKey[] = keysResponse;
@@ -544,8 +547,8 @@ function App() {
         if (authData.has_admin_key) {
           try {
             const [costsResponse, costDataResponse] = await Promise.all([
-              api.get_total_costs({ start_date: null, end_date: null }),
-              api.get_all_costs()
+              AnthropicApiKeyManager.get_total_costs({ start_date: null, end_date: null }),
+              AnthropicApiKeyManager.get_all_costs()
             ]);
             // Convert TotalCostsResponse to CostData format
             const costs = {
