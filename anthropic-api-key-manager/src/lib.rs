@@ -1,4 +1,3 @@
-use hyperprocess_macro::*;
 use hyperware_process_lib::{
     our,
     println,
@@ -188,7 +187,7 @@ struct AnthropicApiKey {
     workspace_id: String,
 }
 
-#[hyperprocess(
+#[hyperapp_macro::hyperapp(
     name = "Anthropic API Key Manager",
     ui = Some(HttpBindingConfig::default()),
     endpoints = vec![
@@ -567,9 +566,9 @@ impl AnthropicApiKeyManagerState {
         let starting_at = if let Some(ref last_date) = self.last_cost_query_date {
             // Validate that it's a proper date format, not a page token or corrupted data
             // Page tokens are base64 encoded and don't contain 'T' or '-' characters in the expected positions
-            if last_date.len() >= 19 && 
-               last_date.chars().nth(4) == Some('-') && 
-               last_date.chars().nth(7) == Some('-') && 
+            if last_date.len() >= 19 &&
+               last_date.chars().nth(4) == Some('-') &&
+               last_date.chars().nth(7) == Some('-') &&
                last_date.chars().nth(10) == Some('T') {
                 // Looks like a valid date format
                 last_date.clone()
@@ -761,11 +760,11 @@ impl AnthropicApiKeyManagerState {
         // Store the latest date we've queried for next time
         if let Some(latest) = latest_date {
             // Validate this is actually a date and not something else (like a page token)
-            let is_valid_date = latest.len() >= 19 && 
-                               latest.chars().nth(4) == Some('-') && 
-                               latest.chars().nth(7) == Some('-') && 
+            let is_valid_date = latest.len() >= 19 &&
+                               latest.chars().nth(4) == Some('-') &&
+                               latest.chars().nth(7) == Some('-') &&
                                latest.chars().nth(10) == Some('T');
-            
+
             if !is_valid_date {
                 println!("WARNING: Refusing to store invalid date format as last_cost_query_date: '{}'", latest);
                 // Don't update last_cost_query_date with invalid data
@@ -788,7 +787,7 @@ impl AnthropicApiKeyManagerState {
                         }
                     }
                 };
-                
+
                 println!("Updating last_cost_query_date to: {}", formatted_date);
                 self.last_cost_query_date = Some(formatted_date);
             }

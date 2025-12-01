@@ -590,13 +590,12 @@ dependencies = [
 name = "anthropic-api-key-manager"
 version = "0.1.0"
 dependencies = [
- "anthropic_api_key_manager_caller_utils",
  "anyhow",
  "base64",
  "chrono",
  "http",
- "hyperprocess_macro",
- "hyperware_process_lib",
+ "hyperapp_macro",
+ "hyperware_process_lib 2.2.0 (git+https://github.com/hyperware-ai/process_lib?rev=1a6ad9d)",
  "process_macros",
  "rand 0.8.5",
  "serde",
@@ -612,7 +611,7 @@ dependencies = [
  "anyhow",
  "futures",
  "futures-util",
- "hyperware_process_lib",
+ "hyperware_process_lib 2.2.0 (git+https://github.com/hyperware-ai/process_lib?rev=fadce45)",
  "once_cell",
  "process_macros",
  "serde",
@@ -1720,11 +1719,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "hyperprocess_macro"
-version = "0.1.0"
-source = "git+https://github.com/hyperware-ai/hyperprocess-macro?rev=ac43744#ac437440d2eb2de6e5196a79eb02e3e6c78b5f62"
+name = "hyperapp_macro"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e694a2a3dd6c4d1ba3ec2110b054dca52834ae10d98630b39efd7a59ed4887c8"
 dependencies = [
- "hyperware_process_lib",
+ "hyperware_process_lib 2.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "proc-macro2",
  "quote",
  "syn 2.0.106",
@@ -1733,7 +1733,8 @@ dependencies = [
 [[package]]
 name = "hyperware_process_lib"
 version = "2.2.0"
-source = "git+https://github.com/hyperware-ai/process_lib?rev=b9f1ead#b9f1ead63356bfd4b60b337a380fef1be81d81c6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a88ae09ea2fc27abf8f84b9e6bde0cdd7a6b0eddfef11364fe147dc216b6d1d"
 dependencies = [
  "alloy",
  "alloy-primitives",
@@ -1743,6 +1744,69 @@ dependencies = [
  "base64",
  "bincode",
  "color-eyre",
+ "futures-channel",
+ "futures-util",
+ "http",
+ "mime_guess",
+ "rand 0.8.5",
+ "regex",
+ "rmp-serde",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tracing",
+ "tracing-error",
+ "tracing-subscriber",
+ "url",
+ "uuid",
+ "wit-bindgen 0.42.1",
+]
+
+[[package]]
+name = "hyperware_process_lib"
+version = "2.2.0"
+source = "git+https://github.com/hyperware-ai/process_lib?rev=1a6ad9d#1a6ad9d00e98bd6b268a7d434a7e78a0bb3cce7b"
+dependencies = [
+ "alloy",
+ "alloy-primitives",
+ "alloy-sol-macro",
+ "alloy-sol-types",
+ "anyhow",
+ "base64",
+ "bincode",
+ "color-eyre",
+ "futures-channel",
+ "futures-util",
+ "http",
+ "mime_guess",
+ "rand 0.8.5",
+ "regex",
+ "rmp-serde",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tracing",
+ "tracing-error",
+ "tracing-subscriber",
+ "url",
+ "uuid",
+ "wit-bindgen 0.42.1",
+]
+
+[[package]]
+name = "hyperware_process_lib"
+version = "2.2.0"
+source = "git+https://github.com/hyperware-ai/process_lib?rev=fadce45#fadce4510cfef32d344dab8abffbc6e579ddac02"
+dependencies = [
+ "alloy",
+ "alloy-primitives",
+ "alloy-sol-macro",
+ "alloy-sol-types",
+ "anyhow",
+ "base64",
+ "bincode",
+ "color-eyre",
+ "futures-channel",
  "futures-util",
  "http",
  "mime_guess",
